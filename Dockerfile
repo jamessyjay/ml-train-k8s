@@ -3,7 +3,6 @@ FROM nvidia/cuda:12.6.1-devel-ubuntu24.04 AS builder
 ARG PYVER=3.12
 ENV DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1
 
-# Build tools: cmake/ninja are mandatory for flash-attn
 RUN apt-get update && apt-get install -y \
       python${PYVER} python${PYVER}-venv python${PYVER}-dev \
       build-essential git cmake ninja-build \
@@ -11,23 +10,28 @@ RUN apt-get update && apt-get install -y \
   && python -m venv /venv \
   && . /venv/bin/activate && python -m pip install --upgrade pip
 
-# Torch with CUDA 12.6 + dependencies
+# Torch CUDA12.6 + стек HF
 RUN . /venv/bin/activate && \
     pip install --index-url https://download.pytorch.org/whl/cu126 \
       "torch==2.6.*" "torchvision==0.21.*" "torchaudio==2.6.*" && \
-    pip install pydantic==2.9.2 torchmetrics==1.4.0.post0 peft && \
-# ===== builder =====
-    python - <<'PY'
+    pip install \
+      "transformers==4.45.*" \
+      "peft>=0.13" \
+      "accelerate>=0.34" \
+      "datasets>=2.19" \
+      "sentencepiece" \
+      "protobuf<6"
+
+# Sanity-check
+RUN . /venv/bin/activate && python - <<'PY'
 import sys
-try:
-    import torch, transformers  # verify install
-    print("[builder] imports ok:", torch.__version__, transformers.__version__)
-except Exception as e:
-    print("[builder] import failed:", e, file=sys.stderr)
-    sys.exit(1)
+import torch, transformers, peft
+print("[builder] torch:", torch.__version__)
+print("[builder] transformers:", transformers.__version__)
+print("[builder] peft:", peft.__version__)
 PY
 
-# Clean up inside venv
+# Очистка
 RUN . /venv/bin/activate && \
     find /venv -type d -name "__pycache__" -prune -exec rm -rf {} + && \
     find /venv -type f -name "*.pyc" -delete && \
@@ -36,14 +40,17 @@ RUN . /venv/bin/activate && \
 # ===== runtime =====
 FROM nvidia/cuda:12.6.1-runtime-ubuntu24.04
 ARG PYVER=3.12
-ENV VIRTUAL_ENV=/opt/venv PATH=/opt/venv/bin:$PATH \
-    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH=/opt/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python${PYVER} python${PYVER}-venv \
   && ln -s /usr/bin/python${PYVER} /usr/bin/python \
   && rm -rf /var/lib/apt/lists/*
 
-# Disable default NVIDIA entrypoint banner/license notice
 ENTRYPOINT []
 
 COPY --from=builder /venv /opt/venv
@@ -52,4 +59,5 @@ RUN ln -s /opt/venv /venv
 WORKDIR /app
 COPY src/ ./src/
 
-CMD ["python", "/app/src/train.py"]
+# Light preflight on start
+CMD ["bash","-lc","python - <<'PY'\nimport torch, transformers;print('OK', torch.__version__, transformers.__version__)\nPY\n"]
