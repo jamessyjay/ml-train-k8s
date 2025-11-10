@@ -49,7 +49,7 @@ spec:
       containers:
         - name: trainer
           # docker image with pytorch and transformers
-          image: nvcr.io/nvidia/pytorch:24.07-py3
+          image: ghcr.io/jamessyjay/gpu-cluster-acceptance:gpu
           imagePullPolicy: IfNotPresent
           command: ["bash","-lc"]
           args:
