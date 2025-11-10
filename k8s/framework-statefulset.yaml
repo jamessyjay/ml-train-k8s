@@ -32,7 +32,7 @@ spec:
         # label for pod selection
         app: train-llm
     spec:
-      restartPolicy: Never
+      restartPolicy: Always
       # https://cloud.google.com/blog/products/containers-kubernetes/kubernetes-best-practices-terminating-with-grace
       terminationGracePeriodSeconds: 120
       affinity:
