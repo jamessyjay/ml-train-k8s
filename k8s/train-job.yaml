@@ -49,7 +49,7 @@ spec:
           - { name: NPROC_PER_NODE, value: "1" }
           - { name: OMP_NUM_THREADS, value: "16" }
           # Rendezvous via etcd (shared with framework job)
-          - { name: RDZV_ID, value: metadata.labels['job-name'] }
+          - { name: RDZV_ID, value: "train-smoke" }
           - { name: RDZV_BACKEND, value: "etcd" }
           - { name: RDZV_ENDPOINT, value: "etcd:2379" }
           - { name: RDZV_TIMEOUT, value: "600" }
