@@ -42,7 +42,7 @@ spec:
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: trainer
-          image: ghcr.io/jamessyjay/gpu-cluster-acceptance:gpu
+          image: ghcr.io/jamessyjay/gpu-cluster-acceptance:train-smoke
           imagePullPolicy: IfNotPresent
           command: ["bash", "-lc"]
           args:
