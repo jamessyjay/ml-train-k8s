@@ -49,7 +49,7 @@ spec:
           - { name: NPROC_PER_NODE, value: "1" }
           - { name: OMP_NUM_THREADS, value: "16" }
           # Rendezvous via etcd (shared with framework job)
-          - { name: RDZV_ID, value: "train-smoke" }
+          - { name: RDZV_ID, value: "run_train-smoke" }
           - { name: RDZV_BACKEND, value: "etcd" }
           - { name: RDZV_ENDPOINT, value: "etcd:2379" }
           - { name: RDZV_TIMEOUT, value: "600" }
@@ -77,9 +77,31 @@ spec:
           - |
             set -euo pipefail
             
-            # check etcd connection
-            for i in $(seq 1 60); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
+            # check etcd DNS
+            getent hosts etcd || { echo "[preflight] DNS etcd не резолвится"; exit 1; }
+            
+            # wait for etcd port (up to 2 minutes)
+            for i in $(seq 1 60); do
+              if nc -z -w2 etcd 2379; then
+                echo "[preflight] etcd:2379 OK"; break
+              fi
+              sleep 2
+              if [ "$i" -eq 60 ]; then echo "[preflight] etcd TIMEOUT"; exit 1; fi
+            done
 
+            # check etcd connection
+            curl -sf http://etcd:2379/version || echo "[preflight] /version skipped"
+
+            # clean old torchelastic prefix ONLY on rank=0
+            # (heals 'Not a file ()' and other dirty old keys)
+            : "${RDZV_ID:=train-smoke}"
+            if [ "${RANK:-0}" = "0" ]; then
+              curl -sf -XDELETE "http://etcd:2379/v2/keys/1/torchelastic/p2p/${RDZV_ID}?recursive=true" \
+                && echo "[preflight] cleaned /1/torchelastic/p2p/${RDZV_ID}" \
+                || echo "[preflight] cleanup skipped (nothing to delete)"
+              sleep 1
+            fi
+            
             # sanity check
             python - <<'PY'
             import torch
