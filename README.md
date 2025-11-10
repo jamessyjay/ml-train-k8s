@@ -59,12 +59,16 @@ This guide covers two entry points:
 export HF_HOME=/mnt/filesystem-o2/.cache/hf
 export TRANSFORMERS_CACHE=/mnt/filesystem-o2/.cache/hf
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export TORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export NCCL_DEBUG=WARN
 export NCCL_ASYNC_ERROR_HANDLING=1
 # data/checkpoints roots
 DATA_ROOT=/mnt/filesystem-o2/datasets
 CKPT_ROOT=/mnt/filesystem-o2/checkpoints
 ```
+
+Note on attention implementation:
+- The code auto-detects FlashAttention2: if `flash_attn` is available → uses `flash_attention_2`; otherwise falls back to `sdpa`. No need to install flash-attn to run.
 
 ## Inference after training
 - Option A: Base model + LoRA adapters
@@ -140,8 +144,27 @@ python k8s/src/train_framework.py \
   --model Qwen/Qwen2.5-3B-Instruct \
   --data /tmp/ds.jsonl \
   --output /tmp/out \
-  --epochs 1 --seq-len 512 --batch 1 --grad-accum 1 \
+  --epochs 1 --seq-len 2048 --batch 2 --grad-accum 48 \
   --log-level DEBUG --log-batches all
+```
+
+### Docker run (single node)
+```bash
+docker run --rm --gpus all \
+  --ipc=host --shm-size=16g \
+  -e NNODES=1 -e RANK=0 -e MASTER_ADDR=127.0.0.1 -e MASTER_PORT=29500 \
+  -e EPOCHS=1 -e BATCH=2 -e SEQ_LEN=2048 -e GRAD_ACCUM=48 \
+  -e CUDA_DEVICE_MAX_CONNECTIONS=1 -e TORCH_CUDA_ALLOC_CONF=expandable_segments:True \
+  -v "/mnt/filesystem-o2/datasets:/data:ro" -v "$PWD/out:/out" \
+  <image> bash -lc 'NPROC_PER_NODE=$(python -c "import torch;print(max(1, torch.cuda.device_count()))"); \
+    echo Using GPUs: $NPROC_PER_NODE; \
+    torchrun --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \
+      --rdzv_backend=c10d --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
+      /app/src/train_framework.py \
+      --model Qwen/Qwen2.5-3B-Instruct --data /data/ds.jsonl \
+      --output /out/run-$(date +%Y%m%d-%H%M) \
+      --lora --bf16 --epochs $EPOCHS --seq-len $SEQ_LEN --batch $BATCH --grad-accum $GRAD_ACCUM \
+      --log-level INFO --log-batches first-last'
 ```
 
 ### Online use with gated models (Hugging Face)
@@ -183,7 +206,7 @@ torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 
   --model Qwen/Qwen2.5-3B-Instruct \
   --data /tmp/ds.jsonl \
   --output /tmp/out \
-  --epochs 1 --seq-len 512 --batch 1 --grad-accum 1 \
+  --epochs 1 --seq-len 2048 --batch 2 --grad-accum 48 \
   --log-level INFO --log-batches first-last
 ```
 
@@ -296,7 +319,7 @@ torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 
 ## Notes
 - Batch size flags are per-rank (per GPU). Effective global batch = batch * world_size * grad_accum.
 - BF16 works best on recent GPUs (A100/H100). If unstable, try FP16 (omit --bf16).
-- For K8s, ensure you mount the model/data/output volumes and set GPU resources.
+- For K8s, ensure you mount the model/data/output volumes and set GPU resources. Also, consider setting `TORCH_CUDA_ALLOC_CONF` to optimize memory allocation.
 
 ---
 
@@ -310,14 +333,14 @@ This section is a prescriptive setup you can hand to ops/ML engineers.
   - /data (JSONL)
   - /out (training outputs)
 - Run with torchrun:
-  ```bash
-  torchrun --nproc_per_node=${NUM_GPUS} --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
-    k8s/src/train_framework.py \
-    --model Qwen/Qwen2.5-3B-Instruct \
-    --data /data/dataset.jsonl --output /out/run-$(date +%Y%m%d-%H%M) \
-    --epochs 1 --seq-len 2048 --batch 2 --grad-accum 8 \
-    --log-level INFO --log-batches first-last
-  ```
+```bash
+torchrun --nproc_per_node=${NUM_GPUS} --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
+  k8s/src/train_framework.py \
+  --model Qwen/Qwen2.5-3B-Instruct \
+  --data /data/dataset.jsonl --output /out/run-$(date +%Y%m%d-%H%M) \
+  --epochs 1 --seq-len 2048 --batch 2 --grad-accum 48 \
+  --log-level INFO --log-batches first-last
+```
 
 ## Multi-node, multi-GPU (DDP)
 - One rank per GPU; torchrun across nodes.
@@ -351,11 +374,11 @@ This section is a prescriptive setup you can hand to ops/ML engineers.
     - TRANSFORMERS_OFFLINE=1 when fully offline
     - NCCL_DEBUG=INFO (debugging)
   - command:
-    ```bash
-    torchrun --nproc_per_node=$NPROC --rdzv_backend=c10d --rdzv_endpoint=$HOST_IP:29500 \
-      k8s/src/train_framework.py --model <id-or-local> --data /data/ds.jsonl \
-      --output /out/<run-id> --epochs 1 --seq-len 4096 --batch 2 --grad-accum 8
-    ```
+  ```bash
+  torchrun --nproc_per_node=$NPROC --rdzv_backend=c10d --rdzv_endpoint=$HOST_IP:29500 \
+    k8s/src/train_framework.py --model <id-or-local> --data /data/ds.jsonl \
+    --output /out/<run-id> --epochs 1 --seq-len 2048 --batch 2 --grad-accum 48
+  ```
 - Multi-node on K8s:
   - Use a StatefulSet or Job with stable hostnames; pick rank0 Pod as rendezvous host.
   - Headless Service to resolve MASTER_ADDR.

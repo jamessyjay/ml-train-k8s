@@ -58,9 +58,9 @@ spec:
               export RANK=${HOSTNAME##*-}              # pod index as rank
               export WORLD_SIZE=$(($NNODES * $NPROC_PER_NODE))
               export EPOCHS=1       # number of epochs
-              export BATCH=6        # a distributed batch size
-              export SEQ_LEN=4096   # training sequence length
-              export GRAD_ACCUM=24  # gradient accumulation
+              export BATCH=2        # per-GPU batch size (OOM-safe default)
+              export SEQ_LEN=3072   # training sequence length (OOM-safe default)
+              export GRAD_ACCUM=40  # gradient accumulation to keep tokens/step
 
               # Recommended ENV
               export CUDA_DEVICE_MAX_CONNECTIONS=1
