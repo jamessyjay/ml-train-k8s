@@ -2,6 +2,10 @@
 
 Practical recipes to run `train_framework.py` and `train.py` on Kubernetes with GPUs.
 
+Current implementation is for one model training distributedly, all pods — participants of one torchrun world.
+We have this pattern: nnodes=$NNODES, nproc_per_node=$NPROC_PER_NODE, RANK = pod index. 
+This is 1 model on all pods. We just move this to Job and make rendezvous through etcd.
+
 ## Preparation (Before you run)
 - **Image**
   - Build/push your image that contains the project (Dockerfile provided) so the script path inside the container is `/app/src/train_framework.py`.
@@ -24,7 +28,12 @@ Practical recipes to run `train_framework.py` and `train.py` on Kubernetes with 
   - `NCCL_DEBUG=INFO`, `NCCL_SOCKET_IFNAME=eth0` (or your interface), `TORCH_NCCL_ASYNC_ERROR_HANDLING=1`
 - **Offline training (optional)**
   - Mount model snapshot to `/models/<name>` and run with `--model-local-dir /models/<name> --tokenizer-local-dir /models/<name> --local-files-only`.
-- **Quick deploy**
+
+### Scaling
+	•	Now: 4 nodes × 1 GPU → NNODES=4, NPROC_PER_NODE=1 → WORLD_SIZE=4.
+	•	Later: 64 nodes × 8 GPUs → NNODES=64, NPROC_PER_NODE=8 → WORLD_SIZE=512.
+
+### Quick deploy
   - Save the Service and StatefulSet manifests and apply:
     ```bash
     kubectl apply -f train-rdzv.yaml

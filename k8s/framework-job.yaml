@@ -1,0 +1,108 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train-llm
+  namespace: train
+spec:
+  # indexed jobs give each pod an index → convenient to map to RANK
+  completionMode: Indexed
+  completions: 4
+  parallelism: 4  # number of pods to run in parallel (@scale out)
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600   # keep pods for 1 hour after completion
+  template:
+    spec:
+      restartPolicy: Never  # never restart pods once completed or failed
+      # distribute across nodes (as in your example)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100   # the less the weight, the less the pods are spread
+            podAffinityTerm:
+              labelSelector: { matchLabels: { app: train-llm } }
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: trainer
+        image: ghcr.io/jamessyjay/gpu-cluster-acceptance:train-smoke  # docker image with pytorch and transformers (see Dockerfile)
+        imagePullPolicy: Always
+        env:
+          - name: PATH
+            value: "/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          - name: HF_HOME
+            value: /mnt/filesystem-o2/.cache/hf
+          # memory allocation params (see pytorch for more details)
+          - { name: TORCH_CUDA_ALLOC_CONF, value: "expandable_segments:True" }
+          # network params (see pytorch for more details)
+          - { name: NCCL_IB_DISABLE, value: "1" }        # TCP; IB is below
+          # network interface for TCP
+          - { name: NCCL_SOCKET_IFNAME, value: "eth0" }
+          # algorithm for GPU communication
+          - { name: NCCL_ALGO, value: "Ring" }
+          # number of sockets per thread
+          - { name: NCCL_NSOCKS_PERTHREAD, value: "8" }
+          # number of threads per socket
+          - { name: NCCL_SOCKET_NTHREADS, value: "8" }
+          # async error handling
+          - { name: TORCH_NCCL_ASYNC_ERROR_HANDLING, value: "1" }
+          - { name: NCCL_DEBUG, value: "INFO" }
+          # pod index (0..3) = your RANK
+          - name: RANK
+            valueFrom: { fieldRef: { fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index'] } }
+          # total number of nodes = completions
+          - { name: NNODES, value: "4" }
+          # how many processes per node → for 1 GPU/node = 1
+          - { name: NPROC_PER_NODE, value: "1" }
+          - { name: OMP_NUM_THREADS, value: "16" }
+          # rendezvous params (see pytorch for more details)
+          - { name: RDZV_BACKEND, value: "etcd" }
+          # rdzv: use etcd (see below), to avoid headless DNS
+          - { name: RDZV_ENDPOINT, value: "etcd.train.svc.cluster.local:2379" }
+          # rendezvous timeouts (after which the job is considered failed)
+          - { name: RDZV_TIMEOUT, value: "600" }
+          - { name: RDZV_JOIN_TIMEOUT, value: "600" }
+          # Training params (see pytorch for more details)
+          - { name: MODEL, value: "Qwen/Qwen2.5-3B-Instruct" }
+          - { name: DATA, value: "/data/instruct.jsonl" }
+          - { name: OUTPUT, value: "/out/run-$(date +%Y%m%d-%H%M)" }
+          - { name: EPOCHS, value: "1" }
+          - { name: BATCH, value: "2" }
+          - { name: SEQ_LEN, value: "3584" }
+          - { name: GRAD_ACCUM, value: "36" }
+          - { name: REPORT_JSON, value: "/out/report.json" }
+        resources:
+          # limit up to 1 vGPUs, 16 vCPUs and 128Gi of RAM per Node
+          # to @scale, increase these limits
+          limits:   { nvidia.com/gpu: 1, cpu: "16", memory: 128Gi }
+          requests: { nvidia.com/gpu: 1, cpu: "12", memory: 96Gi }
+        volumeMounts:
+          - { name: shared, mountPath: /data,   subPath: datasets }
+          - { name: shared, mountPath: /out,    subPath: outputs }
+          - { name: shared, mountPath: /models, subPath: models }
+        command: ["bash","-lc"]
+        args:
+          - |
+              set -euo pipefail
+              export WORLD_SIZE=$(($NNODES * $NPROC_PER_NODE))
+
+              # wait for etcd availability
+              for i in $(seq 1 120); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
+
+              # sanity check
+              python - <<'PY'
+              import torch, transformers; print("OK", torch.__version__, transformers.__version__)
+              PY
+
+              # training one model on all pods (see settings above):
+              /opt/venv/bin/torchrun \
+                --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \
+                --rdzv_backend=$RDZV_BACKEND --rdzv_endpoint=$RDZV_ENDPOINT --rdzv_id=train-$RANDOM \
+                --rdzv_conf join_timeout=$RDZV_JOIN_TIMEOUT,timeout=$RDZV_TIMEOUT \
+                /app/src/train_framework.py \
+                --model $MODEL --data $DATA \
+                --output $OUTPUT \
+                --lora --bf16 --epochs $EPOCHS --seq-len $SEQ_LEN --batch $BATCH --grad-accum $GRAD_ACCUM \
+                --log-level DEBUG --log-batches all --report-json $REPORT_JSON &&
+                echo "[OK] Training completed successfully" || echo "[FAILED] Training failed"
+      volumes:
+      - name: shared
+        hostPath: { path: /mnt/filesystem-o2, type: Directory }
