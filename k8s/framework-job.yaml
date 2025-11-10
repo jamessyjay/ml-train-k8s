@@ -85,6 +85,7 @@ spec:
               export WORLD_SIZE=$(($NNODES * $NPROC_PER_NODE))
 
               # wait for etcd availability
+              apt install -y netcat
               for i in $(seq 1 120); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
 
               # sanity check
