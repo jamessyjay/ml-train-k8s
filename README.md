@@ -1,4 +1,4 @@
-# k8s-training/k8s — Training Guide
+# k8s — Training Guide
 
 This guide covers two entry points:
 
@@ -51,7 +51,7 @@ This guide covers two entry points:
   ```bash
   torchrun --nnodes=4 --nproc_per_node=1 \
     --rdzv_backend=c10d --rdzv_endpoint=<headless-svc>:29500 \
-    k8s-training/k8s/train_framework.py ...
+    k8s/src/train_framework.py ...
   ```
 
 ## Runtime settings (recommended)
@@ -85,7 +85,7 @@ CKPT_ROOT=/mnt/filesystem-o2/checkpoints
 - Rich logging with adjustable verbosity and batch-level debugging.
 
 ### Requirements
-- Python 3.9+ (or 3.10+)
+- Python 3.10+
 - GPU with recent CUDA + PyTorch with CUDA
 - Packages: transformers, peft, torch (and optionally huggingface_hub for online download)
 
@@ -136,7 +136,7 @@ EOF
 
 ### Quick start (single GPU, open model)
 ```bash
-python k8s-training/k8s/train_framework.py \
+python k8s/src/train_framework.py \
   --model Qwen/Qwen2.5-3B-Instruct \
   --data /tmp/ds.jsonl \
   --output /tmp/out \
@@ -165,7 +165,7 @@ Prepare a local model folder in HF format (e.g., copied from another machine):
 Run offline:
 ```bash
 export TRANSFORMERS_OFFLINE=1
-python k8s-training/k8s/train_framework.py \
+python k8s/src/train_framework.py \
   --model Qwen/Qwen2.5-3B-Instruct \
   --model-local-dir /models/Qwen2.5-3B-Instruct \
   --tokenizer-local-dir /models/Qwen2.5-3B-Instruct \
@@ -179,7 +179,7 @@ python k8s-training/k8s/train_framework.py \
 ### Multi-GPU (DDP via torchrun)
 ```bash
 torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
-  k8s-training/k8s/train_framework.py \
+  k8s/src/train_framework.py \
   --model Qwen/Qwen2.5-3B-Instruct \
   --data /tmp/ds.jsonl \
   --output /tmp/out \
@@ -243,14 +243,14 @@ Notes:
 
 ### Single-GPU example
 ```bash
-python k8s-training/k8s/train.py \
+python k8s/src/train.py \
   --epochs 2 --batch 256 --samples 4096 --features 128 --classes 4 --lr 3e-3 --seed 42
 ```
 
 ### Multi-GPU (DDP via torchrun)
 ```bash
 torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
-  k8s-training/k8s/train.py \
+  k8s/src/train.py \
   --epochs 2 --batch 256 --samples 4096 --features 128 --classes 4 --lr 3e-3 --seed 42
 ```
 
@@ -270,24 +270,24 @@ torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 
 
 - Minimal framework smoke
   ```bash
-  python k8s-training/k8s/train_framework.py --model Qwen/Qwen2.5-3B-Instruct --data /tmp/ds.jsonl --output /tmp/out \
+  python k8s/src/train_framework.py --model Qwen/Qwen2.5-3B-Instruct --data /tmp/ds.jsonl --output /tmp/out \
     --epochs 1 --seq-len 512 --batch 1 --grad-accum 1
   ```
 - Maximum debug
   ```bash
-  python k8s-training/k8s/train_framework.py --model Qwen/Qwen2.5-3B-Instruct --data /tmp/ds.jsonl --output /tmp/out \
+  python k8s/src/train_framework.py --model Qwen/Qwen2.5-3B-Instruct --data /tmp/ds.jsonl --output /tmp/out \
     --epochs 1 --seq-len 512 --batch 1 --grad-accum 1 --log-level DEBUG --log-batches all
   ```
 - Fully offline
   ```bash
-  TRANSFORMERS_OFFLINE=1 python k8s-training/k8s/train_framework.py --model <name> \
+  TRANSFORMERS_OFFLINE=1 python k8s/src/train_framework.py --model <name> \
     --model-local-dir /models/<name> --tokenizer-local-dir /models/<name> --local-files-only \
     --data /tmp/ds.jsonl --output /tmp/out --lora --bf16 --epochs 1 --seq-len 512 --batch 1 --grad-accum 1
   ```
 - DDP
   ```bash
   torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
-    k8s-training/k8s/train_framework.py --model Qwen/Qwen2.5-3B-Instruct --data /tmp/ds.jsonl --output /tmp/out \
+    k8s/src/train_framework.py --model Qwen/Qwen2.5-3B-Instruct --data /tmp/ds.jsonl --output /tmp/out \
     --epochs 1 --seq-len 512 --batch 1 --grad-accum 1
   ```
 
@@ -312,7 +312,7 @@ This section is a prescriptive setup you can hand to ops/ML engineers.
 - Run with torchrun:
   ```bash
   torchrun --nproc_per_node=${NUM_GPUS} --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
-    k8s-training/k8s/train_framework.py \
+    k8s/src/train_framework.py \
     --model Qwen/Qwen2.5-3B-Instruct \
     --data /data/dataset.jsonl --output /out/run-$(date +%Y%m%d-%H%M) \
     --epochs 1 --seq-len 2048 --batch 2 --grad-accum 8 \
@@ -330,7 +330,7 @@ This section is a prescriptive setup you can hand to ops/ML engineers.
   ```bash
   torchrun --nnodes=${NNODES} --node_rank=${NODE_RANK} \
     --nproc_per_node=${NGPU} --rdzv_backend=c10d --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
-    k8s-training/k8s/train_framework.py ...
+    k8s/src/train_framework.py ...
   ```
 - NCCL tips (often helpful):
   ```bash
@@ -353,7 +353,7 @@ This section is a prescriptive setup you can hand to ops/ML engineers.
   - command:
     ```bash
     torchrun --nproc_per_node=$NPROC --rdzv_backend=c10d --rdzv_endpoint=$HOST_IP:29500 \
-      k8s-training/k8s/train_framework.py --model <id-or-local> --data /data/ds.jsonl \
+      k8s/src/train_framework.py --model <id-or-local> --data /data/ds.jsonl \
       --output /out/<run-id> --epochs 1 --seq-len 4096 --batch 2 --grad-accum 8
     ```
 - Multi-node on K8s:
@@ -485,14 +485,14 @@ PY
 
 ## (A) Quick sanity on one GPU (open model)
 ```bash
-python k8s-training/k8s/train_framework.py \
+python k8s/src/train_framework.py \
   --model distilgpt2 --data /data/ds.jsonl --output /out/run \
   --epochs 1 --seq-len 1024 --batch 2 --grad-accum 8
 ```
 
 ## (B) Full debug in container
 ```bash
-python k8s-training/k8s/train_framework.py \
+python k8s/src/train_framework.py \
   --model distilgpt2 --data /data/ds.jsonl --output /out/run \
   --epochs 1 --seq-len 1024 --batch 1 --grad-accum 1 \
   --log-level DEBUG --log-batches all
@@ -501,7 +501,7 @@ python k8s-training/k8s/train_framework.py \
 ## (C) Offline run with local LLaMA snapshot
 ```bash
 export TRANSFORMERS_OFFLINE=1
-python k8s-training/k8s/train_framework.py \
+python k8s/src/train_framework.py \
   --model meta-llama/Llama-3.2-3B-Instruct \
   --model-local-dir /models/llama3.2-3b \
   --tokenizer-local-dir /models/llama3.2-3b \
@@ -513,7 +513,7 @@ python k8s-training/k8s/train_framework.py \
 ## (D) DDP across 4 GPUs on one node
 ```bash
 torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 \
-  k8s-training/k8s/train_framework.py \
+  k8s/src/train_framework.py \
   --model distilgpt2 --data /data/ds.jsonl --output /out/run \
   --epochs 1 --seq-len 2048 --batch 2 --grad-accum 8
 ```
@@ -523,7 +523,7 @@ torchrun --nproc_per_node=4 --rdzv_backend=c10d --rdzv_endpoint=localhost:29500 
 # Appendix: train.py quick-reference
 - Use this to validate CUDA/NCCL/DDP; not for real LLM training.
 ```bash
-python k8s-training/k8s/train.py \
+python k8s/src/train.py \
   --epochs 2 --batch 256 --samples 4096 --features 128 --classes 4 --lr 3e-3 --seed 42
 
 ```
