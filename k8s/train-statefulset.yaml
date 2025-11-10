@@ -89,7 +89,6 @@ spec:
               cpu: "8"
               memory: 32Gi
           volumeMounts:
-            - { name: shared, mountPath: /app/src, subPath: code/src }  # code directory
             - { name: shared, mountPath: /out, subPath: outputs }   # report directory
             - { name: dshm, mountPath: /dev/shm }   # for PyTorch
       volumes:

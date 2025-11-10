@@ -107,7 +107,6 @@ spec:
             - { name: shared, mountPath: /data, subPath: datasets }
             - { name: shared, mountPath: /out, subPath: outputs }
             - { name: shared, mountPath: /models, subPath: models }
-            - { name: shared, mountPath: /app/src, subPath: code/src }
 
       volumes:
         - name: shared
