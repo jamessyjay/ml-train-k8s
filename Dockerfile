@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y \
       python${PYVER} python${PYVER}-venv python${PYVER}-dev \
-      build-essential git cmake ninja-build \
+      build-essential git cmake ninja-build net-tools netcat-openbsd \
   && ln -s /usr/bin/python${PYVER} /usr/bin/python \
   && python -m venv /venv \
   && . /venv/bin/activate && python -m pip install --upgrade pip
@@ -20,7 +20,8 @@ RUN . /venv/bin/activate && \
       "accelerate>=0.34" \
       "datasets>=2.19" \
       "sentencepiece" \
-      "protobuf<6"
+      "protobuf<6" \
+      "python-etcd==0.4.5"
 
 # Sanity-check
 RUN . /venv/bin/activate && python - <<'PY'
