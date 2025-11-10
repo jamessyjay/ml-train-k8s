@@ -75,9 +75,9 @@ spec:
         args:
           - |
             set -euo pipefail
-
-            # install etcd client for python (rdzv)
-            /opt/venv/bin/pip install --no-cache-dir "python-etcd==0.4.5"
+            
+            # check etcd connection
+            for i in $(seq 1 60); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
 
             # sanity check
             python - <<'PY'

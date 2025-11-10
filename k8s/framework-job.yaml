@@ -84,13 +84,13 @@ spec:
               set -euo pipefail
               export WORLD_SIZE=$(($NNODES * $NPROC_PER_NODE))
 
+              # check etcd connection
+              for i in $(seq 1 60); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
+
               # sanity check
               python - <<'PY'
               import torch, transformers; print("OK", torch.__version__, transformers.__version__)
               PY
-
-              # install etcd client for python (rdzv)
-              /opt/venv/bin/pip install --no-cache-dir "python-etcd==0.4.5"
 
               # training one model on all pods (see settings above):
               /opt/venv/bin/torchrun \
