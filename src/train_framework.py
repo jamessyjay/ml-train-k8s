@@ -392,7 +392,6 @@ def load_base_model(model_name_or_dir: str, use_bf16: bool, local_files_only: bo
         config=cfg,
         torch_dtype=dtype,
         device_map=device_map,
-        dtype=dtype,
         local_files_only=local_files_only,
         attn_implementation=attention_implementation
     )
