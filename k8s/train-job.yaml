@@ -96,8 +96,8 @@ spec:
             # (heals 'Not a file ()' and other dirty old keys)
             : "${RDZV_ID:=train-smoke}"
             if [ "${RANK:-0}" = "0" ]; then
-              curl -sf -XDELETE "http://etcd:2379/v2/keys/1/torchelastic/p2p/${RDZV_ID}?recursive=true" \
-                && echo "[preflight] cleaned /1/torchelastic/p2p/${RDZV_ID}" \
+              curl -sf -XDELETE "http://etcd:2379/v2/keys/1/torchelastic/p2p/run_${RDZV_ID}?recursive=true" \
+                && echo "[preflight] cleaned /1/torchelastic/p2p/run_${RDZV_ID}" \
                 || echo "[preflight] cleanup skipped (nothing to delete)"
               sleep 1
             fi
