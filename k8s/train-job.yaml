@@ -49,6 +49,7 @@ spec:
           - { name: NPROC_PER_NODE, value: "1" }
           - { name: OMP_NUM_THREADS, value: "16" }
           # Rendezvous via etcd (shared with framework job)
+          - { name: RDZV_ID, value: metadata.labels['job-name'] }
           - { name: RDZV_BACKEND, value: "etcd" }
           - { name: RDZV_ENDPOINT, value: "etcd:2379" }
           - { name: RDZV_TIMEOUT, value: "600" }
@@ -88,7 +89,7 @@ spec:
             # distributed smoke training across all pods
             /opt/venv/bin/torchrun \
               --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \
-              --rdzv_backend=$RDZV_BACKEND --rdzv_endpoint=$RDZV_ENDPOINT --rdzv_id=train-$RANDOM \
+              --rdzv_backend=$RDZV_BACKEND --rdzv_endpoint=$RDZV_ENDPOINT --rdzv_id=$RDZV_ID \
               --rdzv_conf join_timeout=$RDZV_JOIN_TIMEOUT,timeout=$RDZV_TIMEOUT \
               /app/src/train.py \
               --epochs 2 --samples $SAMPLES --batch $BATCH --features $FEATURES --classes $CLASSES --lr $LR \
