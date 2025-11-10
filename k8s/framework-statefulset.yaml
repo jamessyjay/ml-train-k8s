@@ -64,9 +64,6 @@ spec:
 
               # Recommended ENV
               export CUDA_DEVICE_MAX_CONNECTIONS=1
-
-              pip install --no-cache-dir --upgrade pip
-              pip install -q "transformers>=4.44" peft accelerate flash-attn --no-build-isolation
               torchrun --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \
                 --rdzv_backend=c10d --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
                 /app/src/train_framework.py \
@@ -89,7 +86,7 @@ spec:
             - { name: MASTER_PORT, value: "29500" }                                # rendezvous service port
             - { name: NNODES, value: "4" }                                         # number of nodes
             - { name: NPROC_PER_NODE, value: "1" }                                 # number of processes per node
-            - { name: OMP_NUM_THREADS, value: "16" }                                # number of threads per process
+            - { name: OMP_NUM_THREADS, value: "16" }                               # number of threads per process
             - { name: HUGGINGFACE_HUB_TOKEN, valueFrom: { secretKeyRef: { name: hf, key: HUGGINGFACE_HUB_TOKEN } } }
           ports:
             - { name: rdzv, containerPort: 29500 }

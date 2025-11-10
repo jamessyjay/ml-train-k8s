@@ -79,6 +79,7 @@ from torch.utils.data import DataLoader, Dataset, DistributedSampler
 from transformers import (
     AutoModelForCausalLM,
     AutoTokenizer,
+    AutoConfig,
     get_linear_schedule_with_warmup,
 )
 from peft import LoraConfig, get_peft_model
@@ -374,11 +375,21 @@ def load_base_model(model_name_or_dir: str, use_bf16: bool, local_files_only: bo
     """Loads base CausalLM (from local dir if provided) and enables grad checkpointing."""
     dtype = torch.bfloat16 if use_bf16 else torch.float16  # select precision: BF16 (better on new GPUs) or FP16
     device_map = "auto" if use_bf16 else None
-    # Flash Attention is only available for BF16 (it requires more memory and available only on H100/H200)
-    attention_implementation = "flash_attention_2" if use_bf16 else "default"   # available only if flash-attn is installed
+    try:
+        import flash_attn  # noqa: F401
+        _use_fa2 = True
+    except Exception:
+        _use_fa2 = False
+    # SDPA or Flash Attention 2. (SDPA - Self-Attention with Dot Product - is the default implementation)
+    attention_implementation = "flash_attention_2" if _use_fa2 else "sdpa"
+    # Build config explicitly and force the attention implementation to avoid HF auto-toggling
+    cfg = AutoConfig.from_pretrained(model_name_or_dir, local_files_only=local_files_only)
+    setattr(cfg, "attn_implementation", attention_implementation)
+    LOGGER.info("[MODEL] attn_impl=%s (flash_attn_installed=%s)", attention_implementation, str(_use_fa2))
     LOGGER.info("[MODEL] loading base model from %s (local_files_only=%s)", model_name_or_dir, str(local_files_only))
     model = AutoModelForCausalLM.from_pretrained(
         model_name_or_dir,
+        config=cfg,
         torch_dtype=dtype,
         device_map=device_map,
         dtype=dtype,

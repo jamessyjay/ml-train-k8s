@@ -1,48 +1,55 @@
-# syntax=docker/dockerfile:1.7-labs
-ARG BASE_IMAGE=ghcr.io/jamessyjay/gpu-cluster-acceptance:gpu
+# ===== builder =====
+FROM nvidia/cuda:12.6.1-devel-ubuntu24.04 AS builder
+ARG PYVER=3.12
+ENV DEBIAN_FRONTEND=noninteractive PIP_NO_CACHE_DIR=1
 
-############################
-# STAGE 1: build wheel
-############################
-FROM nvidia/cuda:12.4.0-devel-ubuntu22.04 AS fa-build
-ENV DEBIAN_FRONTEND=noninteractive MAMBA_ROOT_PREFIX=/opt/conda
-RUN --mount=type=cache,target=/var/cache/apt \
-    apt-get update && apt-get install -y --no-install-recommends curl bzip2 ca-certificates git && \
-    rm -rf /var/lib/apt/lists/*
+# Build tools: cmake/ninja are mandatory for flash-attn
+RUN apt-get update && apt-get install -y \
+      python${PYVER} python${PYVER}-venv python${PYVER}-dev \
+      build-essential git cmake ninja-build \
+  && ln -s /usr/bin/python${PYVER} /usr/bin/python \
+  && python -m venv /venv \
+  && . /venv/bin/activate && python -m pip install --upgrade pip
 
-# micromamba (минимально)
-ARG MAMBA_VERSION=1.5.10
-RUN curl -L -o /tmp/micromamba.tar.bz2 \
-      https://micromamba.snakepit.net/api/micromamba/linux-64/${MAMBA_VERSION} \
- && mkdir -p ${MAMBA_ROOT_PREFIX}/bin \
- && tar -xjf /tmp/micromamba.tar.bz2 -C ${MAMBA_ROOT_PREFIX}/bin --strip-components=1 bin/micromamba \
- && rm -f /tmp/micromamba.tar.bz2
+# Torch with CUDA 12.6 + dependencies
+RUN . /venv/bin/activate && \
+    pip install --index-url https://download.pytorch.org/whl/cu126 \
+      "torch==2.6.*" "torchvision==0.21.*" "torchaudio==2.6.*" && \
+    pip install pydantic==2.9.2 torchmetrics==1.4.0.post0 peft && \
+# ===== builder =====
+    python - <<'PY'
+import sys
+try:
+    import torch, transformers  # verify install
+    print("[builder] imports ok:", torch.__version__, transformers.__version__)
+except Exception as e:
+    print("[builder] import failed:", e, file=sys.stderr)
+    sys.exit(1)
+PY
 
-SHELL ["/bin/bash","-lc"]
+# Clean up inside venv
+RUN . /venv/bin/activate && \
+    find /venv -type d -name "__pycache__" -prune -exec rm -rf {} + && \
+    find /venv -type f -name "*.pyc" -delete && \
+    (command -v strip >/dev/null 2>&1 && find /venv -type f -name "*.so*" -exec strip --strip-unneeded {} + || true)
 
-# ВАЖНО: повторяем стек как в твоей базе: py311 + torch 2.5.1 + CUDA 12.4
-RUN ${MAMBA_ROOT_PREFIX}/bin/micromamba create -y -n buildapp \
-      -c pytorch -c nvidia -c conda-forge \
-      python=3.11 pytorch=2.5.1 pytorch-cuda=12.4 && \
-    ${MAMBA_ROOT_PREFIX}/bin/micromamba run -n buildapp \
-      python -m pip install -U pip wheel setuptools
+# ===== runtime =====
+FROM nvidia/cuda:12.6.1-runtime-ubuntu24.04
+ARG PYVER=3.12
+ENV VIRTUAL_ENV=/opt/venv PATH=/opt/venv/bin:$PATH \
+    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python${PYVER} python${PYVER}-venv \
+  && ln -s /usr/bin/python${PYVER} /usr/bin/python \
+  && rm -rf /var/lib/apt/lists/*
 
-# Сборка flash-attn в wheel (без установки)
-ENV TORCH_CUDA_ARCH_LIST="80;86;89;90" MAX_JOBS=4
-RUN ${MAMBA_ROOT_PREFIX}/bin/micromamba run -n buildapp \
-      pip wheel --no-build-isolation --wheel-dir /wheels "flash-attn==2.6.*"
+# Disable default NVIDIA entrypoint banner/license notice
+ENTRYPOINT []
 
-############################
-# STAGE 2: extend your base
-############################
-FROM ${BASE_IMAGE} AS final
-# ставим колесо в уже существующий conda env "app"
-COPY --from=fa-build /wheels /tmp/wheels
-RUN /opt/conda/envs/app/bin/pip install --no-cache-dir /tmp/wheels/flash_attn-*.whl && \
-    rm -rf /tmp/wheels
+COPY --from=builder /venv /opt/venv
+RUN ln -s /opt/venv /venv
 
 WORKDIR /app
-COPY src/ /app/src/
-ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PYTHONPATH=/app/src
-EXPOSE 29500
-CMD ["/opt/conda/envs/app/bin/python","/app/src/train.py"]
+COPY src/ ./src/
+
+CMD ["python", "/app/src/train.py"]
