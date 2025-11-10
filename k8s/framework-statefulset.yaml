@@ -53,7 +53,7 @@ spec:
         - name: trainer
           # docker image with pytorch and transformers
           image: ghcr.io/jamessyjay/gpu-cluster-acceptance:train-smoke
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           command: ["bash","-lc"]
           args:
             - |
