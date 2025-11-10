@@ -76,17 +76,6 @@ spec:
         args:
           - |
             set -euo pipefail
-
-            if [ "${RANK:-0}" = "0" ]; then
-              python - <<'PY'
-              import os, http.client
-              rid = os.environ.get("RDZV_ID","train-smoke")
-              c = http.client.HTTPConnection("etcd",2379,timeout=3)
-              c.request("DELETE", f"/v2/keys/1/torchelastic/p2p/{rid}?recursive=true")
-              r = c.getresponse(); print("[etcd cleanup]", r.status); r.read()
-              PY
-              sleep 1
-            fi
             
             # check etcd connection
             for i in $(seq 1 60); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
