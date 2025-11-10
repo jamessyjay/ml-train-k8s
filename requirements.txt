@@ -1,0 +1,1 @@
+peft    # includes transformers, pyyaml, torch, requests, tqdm, nvidia-smi and many more
