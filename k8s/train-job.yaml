@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: train-smoke
+  namespace: train
+spec:
+  completionMode: Indexed
+  completions: 4
+  parallelism: 4
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: train-smoke
+    spec:
+      restartPolicy: Never
+      terminationGracePeriodSeconds: 120
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: train-smoke
+              topologyKey: kubernetes.io/hostname
+      containers:
+      - name: trainer
+        image: ghcr.io/jamessyjay/gpu-cluster-acceptance:train-smoke
+        imagePullPolicy: Always
+        env:
+          - name: PATH
+            value: "/opt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+          - { name: TORCH_CUDA_ALLOC_CONF, value: "expandable_segments:True" }
+          - { name: NCCL_IB_DISABLE, value: "1" }
+          - { name: NCCL_SOCKET_IFNAME, value: "eth0" }
+          - { name: NCCL_ALGO, value: "Ring" }
+          - { name: NCCL_NSOCKS_PERTHREAD, value: "8" }
+          - { name: NCCL_SOCKET_NTHREADS, value: "8" }
+          - { name: TORCH_NCCL_ASYNC_ERROR_HANDLING, value: "1" }
+          - { name: NCCL_DEBUG, value: "INFO" }
+          # Pod index (0..3) → RANK
+          - name: RANK
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.annotations['batch.kubernetes.io/job-completion-index']
+          - { name: NNODES, value: "4" }
+          - { name: NPROC_PER_NODE, value: "1" }
+          - { name: OMP_NUM_THREADS, value: "16" }
+          # Rendezvous via etcd (shared with framework job)
+          - { name: RDZV_BACKEND, value: "etcd" }
+          - { name: RDZV_ENDPOINT, value: "etcd.train.svc.cluster.local:2379" }
+          - { name: RDZV_TIMEOUT, value: "600" }
+          - { name: RDZV_JOIN_TIMEOUT, value: "600" }
+          # Training params (from statefulset)
+          - { name: SAMPLES, value: "4096" }
+          - { name: BATCH, value: "256" }
+          - { name: FEATURES, value: "128" }
+          - { name: CLASSES, value: "4" }
+          - { name: LR, value: "0.003" }
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            cpu: "16"
+            memory: 64Gi
+          requests:
+            nvidia.com/gpu: 1
+            cpu: "8"
+            memory: 32Gi
+        volumeMounts:
+          - { name: shared, mountPath: /out, subPath: outputs }
+          - { name: dshm, mountPath: /dev/shm }
+        command: ["bash","-lc"]
+        args:
+          - |
+            set -euo pipefail
+
+            # wait for etcd availability (rdzv)
+            for i in $(seq 1 120); do nc -z $(echo $RDZV_ENDPOINT | cut -d: -f1) $(echo $RDZV_ENDPOINT | cut -d: -f2) && break; sleep 2; done
+
+            # sanity check
+            python - <<'PY'
+            import torch
+            print("Torch:", torch.__version__)
+            PY
+
+            # distributed smoke training across all pods
+            /opt/venv/bin/torchrun \
+              --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \
+              --rdzv_backend=$RDZV_BACKEND --rdzv_endpoint=$RDZV_ENDPOINT --rdzv_id=train-$RANDOM \
+              --rdzv_conf join_timeout=$RDZV_JOIN_TIMEOUT,timeout=$RDZV_TIMEOUT \
+              /app/src/train.py \
+              --epochs 2 --samples $SAMPLES --batch $BATCH --features $FEATURES --classes $CLASSES --lr $LR \
+              && echo "[OK] Training completed" || echo "[FAILED] Training failed"
+      volumes:
+      - name: shared
+        hostPath:
+          path: /mnt/filesystem-o2
+          type: Directory
+      - name: dshm
+        emptyDir:
+          medium: Memory
