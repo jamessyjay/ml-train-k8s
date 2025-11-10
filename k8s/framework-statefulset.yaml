@@ -7,6 +7,9 @@ metadata:
   namespace: train
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true        # important for early rendezvous
+  ipFamilyPolicy: SingleStack           # fix one stack
+  ipFamilies: ["IPv4"]                  # only IPv4
   selector: 
     app: train-llm
   ports:
@@ -76,13 +79,15 @@ spec:
             - { name: HF_HOME, value: /mnt/filesystem-o2/.cache/hf }               # helps with memory allocation
             - { name: TORCH_CUDA_ALLOC_CONF, value: "expandable_segments:True" }   # helps with memory allocation
             - { name: NCCL_IB_DISABLE, value: "1" }                                # no IB → TCP
-            - { name: NCCL_SOCKET_IFNAME, value: "eth0" }                          # your netif
+            - { name: NCCL_SOCKET_IFNAME, value: "eth0" }                          # your net interface
+            - { name: NCCL_SOCKET_FAMILY, value: "AF_INET" }                       # force IPv4
+            - { name: GLOO_SOCKET_IFNAME, value: "eth0" }                          # correct interface for gloo
             - { name: NCCL_ALGO, value: "Ring" }                                   # try Ring/Tree
             - { name: NCCL_NSOCKS_PERTHREAD, value: "8" }                          # helps with TCP over GPUs
             - { name: NCCL_SOCKET_NTHREADS, value: "8" }                           # helps with TCP over GPUs
             - { name: TORCH_NCCL_ASYNC_ERROR_HANDLING, value: "1" }                # helps with TCP over GPUs
             - { name: NCCL_DEBUG, value: "INFO" }                                  # helps with TCP over GPUs
-            - { name: MASTER_ADDR, value: "train-llm-0.train-rdzv.train.svc.cluster.local" }             # rendezvous service address (FQDN)
+            - { name: MASTER_ADDR, value: "train-llm-0.train-rdzv.train.svc.cluster.local" } # rendezvous service FQDN
             - { name: MASTER_PORT, value: "29500" }                                # rendezvous service port
             - { name: NNODES, value: "4" }                                         # number of nodes
             - { name: NPROC_PER_NODE, value: "1" }                                 # number of processes per node
