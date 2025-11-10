@@ -89,6 +89,9 @@ spec:
               import torch, transformers; print("OK", torch.__version__, transformers.__version__)
               PY
 
+              # install etcd client for python (rdzv)
+              /opt/venv/bin/pip install --no-cache-dir "python-etcd==0.4.5"
+
               # training one model on all pods (see settings above):
               /opt/venv/bin/torchrun \
                 --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \

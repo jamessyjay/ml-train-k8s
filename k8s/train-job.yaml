@@ -76,6 +76,9 @@ spec:
           - |
             set -euo pipefail
 
+            # install etcd client for python (rdzv)
+            /opt/venv/bin/pip install --no-cache-dir "python-etcd==0.4.5"
+
             # sanity check
             python - <<'PY'
             import torch
