@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# ml-images-docker-k8s
-Collection of different kinds of Machine Learning templates, useful automation images for docker and k8s.
-=======
 # k8s-training/k8s — Training Guide
 
 This guide covers two entry points:
@@ -531,5 +527,3 @@ python k8s-training/k8s/train.py \
   --epochs 2 --batch 256 --samples 4096 --features 128 --classes 4 --lr 3e-3 --seed 42
 
 ```
-
->>>>>>> 6bd8a6c (Initial commit)
