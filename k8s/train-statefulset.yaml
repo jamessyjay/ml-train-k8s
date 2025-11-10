@@ -48,17 +48,15 @@ spec:
           args:
             - |
               set -euo pipefail
-              export RANK=${HOSTNAME##*-}
-              export WORLD_SIZE=$(($NNODES * $NPROC_PER_NODE))
               export EPOCHS=2
 
               # Recommended ENV
               export CUDA_DEVICE_MAX_CONNECTIONS=1
 
-              torchrun --nnodes=$NNODES --node_rank=$RANK --nproc_per_node=$NPROC_PER_NODE \
+              torchrun --nnodes=4:64 --nproc_per_node=$NPROC_PER_NODE \
                 --rdzv_backend=c10d --rdzv_endpoint=${MASTER_ADDR}:${MASTER_PORT} \
                 /app/src/train.py \
-                --epochs $EPOCHS \
+                --epochs $EPOCHS --samples $SAMPLES --batch $BATCH --features $FEATURES --classes $CLASSES --lr $LR \
                 && sleep 5
           env:
             - { name: NODE_NAME, valueFrom: { fieldRef: { fieldPath: spec.nodeName } } }
@@ -72,9 +70,13 @@ spec:
             - { name: NCCL_DEBUG, value: "INFO" }
             - { name: MASTER_ADDR, value: train-smoke-0.train-smoke-rdzv }
             - { name: MASTER_PORT, value: "29500" }
-            - { name: NNODES, value: "4" }
             - { name: NPROC_PER_NODE, value: "1" }
             - { name: OMP_NUM_THREADS, value: "16" }
+            - { name: SAMPLES, value: "4096" }  # number of samples for training
+            - { name: BATCH, value: "256" }     # batch size per GPU
+            - { name: FEATURES, value: "128" }   # features per sample during the training
+            - { name: CLASSES, value: "4" }      # classes per sample during the training
+            - { name: LR, value: "0.003" }      # learning rate
           ports:
             - { name: rdzv, containerPort: 29500 }
           resources:
@@ -87,10 +89,14 @@ spec:
               cpu: "8"
               memory: 32Gi
           volumeMounts:
-            - { name: shared, mountPath: /app/src, subPath: code/src }
-            - { name: shared, mountPath: /out, subPath: outputs }
+            - { name: shared, mountPath: /app/src, subPath: code/src }  # code directory
+            - { name: shared, mountPath: /out, subPath: outputs }   # report directory
+            - { name: dshm, mountPath: /dev/shm }   # for PyTorch
       volumes:
         - name: shared
           hostPath:
             path: /mnt/filesystem-o2
             type: Directory
+        - name: dshm
+          emptyDir:
+            medium: Memory
