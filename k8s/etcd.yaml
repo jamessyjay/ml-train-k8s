@@ -14,7 +14,7 @@ spec:
         image: gcr.io/etcd-development/etcd:v3.5.14
         command: ["/usr/local/bin/etcd"]
         args:
-          - --advertise-client-urls=http://0.0.0.0:2379
+          - --advertise-client-urls=http://etcd:2379  # to prevent clients from using IP of themselves
           - --listen-client-urls=http://0.0.0.0:2379
           - --enable-v2=true
           - --logger=zap

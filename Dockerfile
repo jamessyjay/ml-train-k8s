@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y \
   && python -m venv /venv \
   && . /venv/bin/activate && python -m pip install --upgrade pip
 
-# Torch CUDA12.6 + стек HF
+# Torch CUDA12.6 + HuggingFace stack
 RUN . /venv/bin/activate && \
     pip install --index-url https://download.pytorch.org/whl/cu126 \
       "torch==2.6.*" "torchvision==0.21.*" "torchaudio==2.6.*" && \
@@ -32,7 +32,7 @@ print("[builder] transformers:", transformers.__version__)
 print("[builder] peft:", peft.__version__)
 PY
 
-# Очистка
+# Cleanup
 RUN . /venv/bin/activate && \
     find /venv -type d -name "__pycache__" -prune -exec rm -rf {} + && \
     find /venv -type f -name "*.pyc" -delete && \
@@ -49,6 +49,7 @@ ENV VIRTUAL_ENV=/opt/venv \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python${PYVER} python${PYVER}-venv \
+      netcat-openbsd net-tools iproute2 dnsutils curl ca-certificates \
   && ln -s /usr/bin/python${PYVER} /usr/bin/python \
   && rm -rf /var/lib/apt/lists/*
 
