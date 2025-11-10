@@ -38,6 +38,8 @@ spec:
           - { name: NCCL_ALGO, value: "Ring" }
           - { name: NCCL_NSOCKS_PERTHREAD, value: "8" }
           - { name: NCCL_SOCKET_NTHREADS, value: "8" }
+          - { name: NCCL_SOCKET_FAMILY, value: "AF_INET" }
+          - { name: GLOO_IPV6, value: "0" }   # no ipv6
           - { name: TORCH_NCCL_ASYNC_ERROR_HANDLING, value: "1" }
           - { name: NCCL_DEBUG, value: "INFO" }
           # Pod index (0..3) → RANK
