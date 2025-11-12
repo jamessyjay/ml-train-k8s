@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-( - AI-generated code -)
 train_smoke.py — DDP smoke-training on synthetic data.
 
 Goal:

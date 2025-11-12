@@ -2,8 +2,6 @@
 # -*- coding: utf-8 -*-
 
 """
-# - AI-generated docstrings -
-
 train.py — minimalistic and readable framework for distributed LoRA training of LLMs
 on PyTorch + Hugging Face Transformers + PEFT with DDP (torchrun).
 
